@@ -1,0 +1,258 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kubernetes Gateway API & Kong — 4 TP complets</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#f4f7fb;color:#18283e;font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif}header{background:linear-gradient(120deg,#102a49,#165a83);color:white;padding:64px max(6%,calc((100% - 1080px)/2));}header h1{font-size:clamp(30px,4vw,53px);line-height:1.15;margin:10px 0}header p{max-width:760px;color:#d5e9f8}.pill{display:inline-block;background:#1d7898;border-radius:100px;padding:5px 14px;font-size:13px;font-weight:700}nav{position:sticky;top:0;background:white;border-bottom:1px solid #dbe4ee;z-index:10;display:flex;gap:20px;overflow:auto;padding:12px 6%;box-shadow:0 3px 10px #0b31500a}nav a{white-space:nowrap;color:#155981;font-weight:700;text-decoration:none}main{max-width:1080px;margin:0 auto;padding:28px 24px 80px}.intro,.chapter{background:white;border:1px solid #dfe7ef;border-radius:16px;margin:24px 0;padding:32px;box-shadow:0 7px 30px #1a3b5708}.eyebrow{color:#087b9e;font-size:12px;font-weight:800;letter-spacing:.13em}h2{font-size:30px;line-height:1.25;margin:8px 0}h3{font-size:18px;margin:0 0 12px}.lead{font-size:18px;color:#536981}.step{padding:24px 0;border-top:1px solid #e8edf3;position:relative}.step:first-of-type{margin-top:22px}.step p{color:#455971}pre{background:#102438;color:#e7f3ff;border-radius:10px;padding:20px;overflow-x:auto;font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre}code{font-family:ui-monospace,monospace}p code{background:#e9f1f8;padding:2px 6px;border-radius:4px}.copy{background:#dcecf7;color:#145078;border:0;padding:8px 14px;border-radius:7px;font-weight:700;cursor:pointer}.copy:hover{background:#c3e3f4}.architecture{display:flex;gap:12px;flex-wrap:wrap;margin:25px 0}.architecture span{background:#e7f1fa;border:1px solid #bcd6e8;border-radius:8px;padding:14px;font-weight:700}.architecture b{align-self:center;color:#2b88a7}.note{border-left:4px solid #1b91b6;background:#eaf6fa;padding:16px 20px;border-radius:6px}footer{text-align:center;color:#637b90;padding:30px}a{color:#116c9c}@media print{nav,.copy{display:none}.chapter{break-before:page;box-shadow:none}pre{white-space:pre-wrap;word-break:break-word}body{background:white}}</style></head><body><header><span class="pill">EFI ACADEMY • SUPPORT DE FORMATION</span><h1>Kubernetes Gateway API<br>avec Kong Gateway</h1><p>Parcours pratique complet : HTTPRoute, HTTPS/TLS Termination, déploiement Canary et observabilité Prometheus/Grafana.</p><p>4 TP progressifs · 11 manifests YAML · Commandes vérifiables · Dépannage et validations</p></header><nav><a href="#overview">Architecture</a><a href="#tp1">TP 01 · HTTP</a><a href="#tp2">TP 02 · HTTPS</a><a href="#tp3">TP 03 · Canary</a><a href="#tp4">TP 04 · Observabilité</a></nav><main><section class="intro" id="overview"><div class="eyebrow">VUE D'ENSEMBLE</div><h2>Architecture de formation</h2><div class="architecture"><span>Client HTTP / HTTPS</span><b>→</b><span>Kong Gateway</span><b>→</b><span>HTTPRoute</span><b>→</b><span>Services V1/V2</span><b>→</b><span>Pods</span></div><p>Le contrôleur Kong Ingress Controller lit GatewayClass, Gateway et HTTPRoute puis programme le proxy Kong. Le TP 2 termine TLS sur Kong, le TP 3 partage le trafic entre deux backends, le TP 4 observe le proxy.</p><div class="note"><strong>Mode laboratoire :</strong> certificats autosignés, port-forward local, chart Helm installé en mode unmanaged. Pour la production, utiliser une PKI reconnue, des règles réseau et une configuration de métriques adaptée. Le ServiceMonitor du TP 4 suppose kube-prometheus-stack et demande de vérifier les labels de l'installation.</div></section><section id="tp1" class="chapter"><div class="eyebrow">TRAVAUX PRATIQUES 01</div><h2>HTTPRoute : publier Hello Kubernetes</h2><p class="lead">Installer Kong, créer GatewayClass, Gateway, Deployment, Service et HTTPRoute.</p><article class="step"><h3>Objectifs</h3><p>Comprendre le plan de contrôle Kong Ingress Controller, le proxy Kong et la relation Gateway → HTTPRoute → Service → Pods. Prérequis : kubectl, Helm, cluster accessible et droits sur les namespaces.</p></article><article class="step"><h3>Installer les CRD Gateway API avant Kong</h3><pre><code>kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.1/standard-install.yaml
+kubectl get crd | grep gateway.networking.k8s.io</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Installer Kong via Helm</h3><pre><code>helm repo add kong https://charts.konghq.com
+helm repo update
+helm install kong kong/ingress -n kong --create-namespace --wait --timeout 10m
+kubectl get pods,svc,deploy -n kong</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Déclarer le contrôleur</h3><p>Fichier <code>01-gatewayclass.yaml</code> :</p><pre><code>apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: kong
+  annotations:
+    konghq.com/gatewayclass-unmanaged: &quot;true&quot;
+spec:
+  controllerName: konghq.com/kic-gateway-controller
+</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Créer le listener HTTP</h3><p>Fichier <code>02-gateway.yaml</code> :</p><pre><code>apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: kong-gateway
+  namespace: kong
+spec:
+  gatewayClassName: kong
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: All
+</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Appliquer la GatewayClass et la Gateway</h3><pre><code>kubectl apply -f 01-gatewayclass.yaml
+kubectl apply -f 02-gateway.yaml
+kubectl get gatewayclass
+kubectl get gateway -n kong</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Créer les Pods V1 et leur Service</h3><p>Fichier <code>03-app-v1.yaml</code> :</p><pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-v1
+  namespace: demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: hello, version: v1}
+  template:
+    metadata:
+      labels: {app: hello, version: v1}
+    spec:
+      containers:
+      - name: hello
+        image: hashicorp/http-echo:1.0.0
+        args: [&quot;-text=Hello Kubernetes V1 via Kong!&quot;, &quot;-listen=:5678&quot;]
+        ports: [{containerPort: 5678}]
+        readinessProbe:
+          tcpSocket: {port: 5678}
+          periodSeconds: 5
+        resources:
+          requests: {cpu: 25m, memory: 32Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-v1
+  namespace: demo
+spec:
+  selector: {app: hello, version: v1}
+  ports: [{port: 80, targetPort: 5678}]
+</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Créer le routage HTTP</h3><p>Fichier <code>04-route-http.yaml</code> :</p><pre><code>apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hello-route
+  namespace: demo
+spec:
+  parentRefs:
+  - name: kong-gateway
+    namespace: kong
+    sectionName: http
+  hostnames: [&quot;hello.example.local&quot;]
+  rules:
+  - matches:
+    - path: {type: PathPrefix, value: /}
+    backendRefs:
+    - name: hello-v1
+      port: 80
+</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Déployer et vérifier</h3><pre><code>kubectl create namespace demo --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f 03-app-v1.yaml
+kubectl apply -f 04-route-http.yaml
+kubectl rollout status deployment/hello-v1 -n demo
+kubectl describe httproute hello-route -n demo</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Tester via port-forward (terminal 1 et terminal 2)</h3><pre><code>kubectl port-forward -n kong svc/kong-gateway-proxy 8080:80
+# Dans un autre terminal :
+curl -i -H &quot;Host: hello.example.local&quot; http://127.0.0.1:8080/</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Validation</h3><p>Attendu : HTTP 200 et « Hello Kubernetes V1 via Kong! ». Test négatif : utiliser un Host inconnu et vérifier le 404. Si le Service proxy porte un autre nom, le retrouver avec kubectl get svc -n kong.</p></article></section><section id="tp2" class="chapter"><div class="eyebrow">TRAVAUX PRATIQUES 02</div><h2>HTTPS : TLS Termination</h2><p class="lead">Chiffrer le trafic client → Kong, puis router en HTTP vers le Service V1.</p><article class="step"><h3>Comprendre la terminaison TLS</h3><p>Le Secret TLS est dans le namespace de la Gateway (kong). Kong présente le certificat, déchiffre HTTPS, puis contacte le backend HTTP. Le certificat autosigné convient uniquement à la formation.</p></article><article class="step"><h3>Créer un certificat avec SAN</h3><pre><code>openssl req -x509 -nodes -newkey rsa:2048 -days 30 -keyout hello.key -out hello.crt -subj &quot;/CN=hello.example.local&quot; -addext &quot;subjectAltName=DNS:hello.example.local&quot;
+kubectl create secret tls hello-tls -n kong --cert=hello.crt --key=hello.key</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Ajouter un listener HTTPS à la Gateway</h3><p>Fichier <code>05-gateway-https.yaml</code> :</p><pre><code>apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: kong-gateway
+  namespace: kong
+spec:
+  gatewayClassName: kong
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces: {from: All}
+  - name: https
+    hostname: hello.example.local
+    protocol: HTTPS
+    port: 443
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        name: hello-tls
+    allowedRoutes:
+      namespaces: {from: All}
+</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Attacher la HTTPRoute au listener HTTPS</h3><p>Fichier <code>06-route-https.yaml</code> :</p><pre><code>apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hello-route
+  namespace: demo
+spec:
+  parentRefs:
+  - name: kong-gateway
+    namespace: kong
+    sectionName: https
+  hostnames: [&quot;hello.example.local&quot;]
+  rules:
+  - matches:
+    - path: {type: PathPrefix, value: /}
+    backendRefs:
+    - name: hello-v1
+      port: 80
+</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Appliquer les modifications</h3><pre><code>kubectl apply -f 05-gateway-https.yaml
+kubectl apply -f 06-route-https.yaml
+kubectl describe gateway kong-gateway -n kong
+kubectl describe httproute hello-route -n demo</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Tester TLS via port-forward</h3><pre><code>kubectl port-forward -n kong svc/kong-gateway-proxy 8443:443
+# Autre terminal :
+curl -kiv --resolve hello.example.local:8443:127.0.0.1 https://hello.example.local:8443/
+openssl x509 -in hello.crt -noout -subject -dates</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Validation</h3><p>Attendu : HTTP 200 avec V1, certificat présenté par Kong. L’option -k ignore la validation du certificat autosigné : ne pas l’utiliser comme solution de production. Vérifier que le port 443 est exposé par le Service Kong.</p></article></section><section id="tp3" class="chapter"><div class="eyebrow">TRAVAUX PRATIQUES 03</div><h2>Canary : répartir le trafic V1 / V2</h2><p class="lead">Faire évoluer progressivement une application sans remplacer brutalement tous les utilisateurs.</p><article class="step"><h3>Déployer une version V2 indépendante</h3><p>Fichier <code>07-app-v2.yaml</code> :</p><pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-v2
+  namespace: demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: hello, version: v2}
+  template:
+    metadata:
+      labels: {app: hello, version: v2}
+    spec:
+      containers:
+      - name: hello
+        image: hashicorp/http-echo:1.0.0
+        args: [&quot;-text=Hello Kubernetes V2 via Kong!&quot;, &quot;-listen=:5678&quot;]
+        ports: [{containerPort: 5678}]
+        readinessProbe:
+          tcpSocket: {port: 5678}
+          periodSeconds: 5
+        resources:
+          requests: {cpu: 25m, memory: 32Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-v2
+  namespace: demo
+spec:
+  selector: {app: hello, version: v2}
+  ports: [{port: 80, targetPort: 5678}]
+</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Activer V2</h3><pre><code>kubectl apply -f 07-app-v2.yaml
+kubectl rollout status deployment/hello-v2 -n demo
+kubectl get endpointslices -n demo</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Configurer les poids 90 % / 10 %</h3><p>Fichier <code>08-route-canary.yaml</code> :</p><pre><code>apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hello-route
+  namespace: demo
+spec:
+  parentRefs:
+  - name: kong-gateway
+    namespace: kong
+    sectionName: https
+  hostnames: [&quot;hello.example.local&quot;]
+  rules:
+  - matches:
+    - path: {type: PathPrefix, value: /}
+    backendRefs:
+    - name: hello-v1
+      port: 80
+      weight: 90
+    - name: hello-v2
+      port: 80
+      weight: 10
+</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Appliquer la route canary</h3><pre><code>kubectl apply -f 08-route-canary.yaml
+kubectl describe httproute hello-route -n demo</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Exécuter 100 requêtes et compter les réponses</h3><pre><code>for i in $(seq 1 100); do curl -ks --resolve hello.example.local:8443:127.0.0.1 https://hello.example.local:8443/; done | sort | uniq -c</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Interprétation</h3><p>Les proportions sont statistiques et peuvent fluctuer. Pour un rollback immédiat, remplacer les poids par V1=100, V2=0 puis réappliquer. Pour une montée progressive, essayer 90/10 → 75/25 → 50/50 → 0/100 après validation des métriques.</p></article></section><section id="tp4" class="chapter"><div class="eyebrow">TRAVAUX PRATIQUES 04</div><h2>Observabilité : Prometheus et Grafana</h2><p class="lead">Suivre le volume de requêtes, les erreurs, la latence et la santé du routage.</p><article class="step"><h3>Prérequis et architecture</h3><p>Ce chapitre suppose kube-prometheus-stack déjà installé et ses CRD ServiceMonitor disponibles. Les métriques du contrôleur KIC et celles du proxy Kong sont distinctes. Pour les requêtes HTTP, activer le plugin Prometheus de Kong Gateway. Vérifier les noms des Services et labels Helm avant de créer un ServiceMonitor.</p></article><article class="step"><h3>Activer le plugin Prometheus global</h3><p>Fichier <code>09-kong-prometheus-plugin.yaml</code> :</p><pre><code>apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: prometheus
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    global: &quot;true&quot;
+plugin: prometheus
+config:
+  per_consumer: false
+  status_code_metrics: true
+  latency_metrics: true
+  bandwidth_metrics: true
+  upstream_health_metrics: true
+</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Vérifier les CRD et appliquer le plugin</h3><pre><code>kubectl get crd kongclusterplugins.configuration.konghq.com
+kubectl apply -f 09-kong-prometheus-plugin.yaml
+kubectl get kongclusterplugin prometheus</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Exposer les métriques du Data Plane</h3><p>La configuration Kong doit activer un listener status/metrics sur 0.0.0.0:8100. Dans un lab DB-less, appliquer cette option au chart via Helm (voir commandes suivantes), puis vérifier la présence du port 8100. Ce port doit rester interne au cluster.</p></article><article class="step"><h3>Activer le listener status Kong (chart Helm)</h3><pre><code>helm upgrade kong kong/ingress -n kong --reuse-values --set gateway.env.status_listen=&quot;0.0.0.0:8100&quot; --wait
+kubectl get pods -n kong
+kubectl get deploy -n kong --show-labels</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Service interne de métriques : vérifier le selector</h3><p>Fichier <code>10-kong-metrics-service.yaml</code> :</p><pre><code>apiVersion: v1
+kind: Service
+metadata:
+  name: kong-prometheus-metrics
+  namespace: kong
+  labels:
+    app.kubernetes.io/name: kong-prometheus-metrics
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: gateway
+  ports:
+  - name: metrics
+    port: 8100
+    targetPort: 8100
+</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Trouver les labels réels du proxy</h3><pre><code>kubectl get pods -n kong --show-labels
+# Adapter spec.selector de 10-kong-metrics-service.yaml au pod Gateway.
+kubectl apply -f 10-kong-metrics-service.yaml
+kubectl get endpointslices -n kong -l kubernetes.io/service-name=kong-prometheus-metrics</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Tester les métriques avant Prometheus</h3><pre><code>kubectl port-forward -n kong svc/kong-prometheus-metrics 8100:8100
+# Dans un autre terminal :
+curl -s http://127.0.0.1:8100/metrics | head -30</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Créer le ServiceMonitor</h3><p>Fichier <code>11-servicemonitor.yaml</code> :</p><pre><code>apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kong-prometheus
+  namespace: kong
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: [kong]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kong-prometheus-metrics
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Appliquer et contrôler la découverte</h3><pre><code>kubectl get crd servicemonitors.monitoring.coreos.com
+# Adapter metadata.labels.release selon le sélecteur du Prometheus installé.
+kubectl apply -f 11-servicemonitor.yaml
+kubectl get servicemonitor -n kong
+# Dans Prometheus : Status &gt; Targets, vérifier la cible kong-prometheus.</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Générer du trafic pour remplir les métriques</h3><pre><code>for i in $(seq 1 300); do curl -ks --resolve hello.example.local:8443:127.0.0.1 https://hello.example.local:8443/ &gt;/dev/null; done</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Exemples de requêtes PromQL (adapter les labels et noms exposés)</h3><pre><code>sum(rate(kong_http_requests_total[5m]))
+sum by (code) (rate(kong_http_requests_total[5m]))
+sum(rate(kong_http_requests_total{code=~&quot;5..&quot;}[5m])) / clamp_min(sum(rate(kong_http_requests_total[5m])), 0.001)
+# Explorer les métriques réellement disponibles via /metrics :
+# kong_latency_ms_bucket, kong_kong_latency_ms_bucket, etc. selon la version/plugin.</code></pre><button class="copy" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText);this.textContent='Copié !'">Copier</button></article><article class="step"><h3>Tableau de bord et alertes</h3><p>Dans Grafana : datasource Prometheus, panneaux RPS, 4xx/5xx, taux 5xx, latence p95 si histogrammes disponibles. Ajouter une alerte lorsque le ratio 5xx dépasse 5 % pendant 5 minutes, et une alerte « cible absente ». Les noms exacts des métriques et leur granularité varient selon les versions Kong et les options du plugin.</p></article></section><section class="intro"><h2>Références officielles</h2><p><a href="https://developer.konghq.com/kubernetes-ingress-controller/install/">Installation Kong</a> · <a href="https://developer.konghq.com/kubernetes-ingress-controller/routing/https-tls-termination/">HTTPS</a> · <a href="https://developer.konghq.com/kubernetes-ingress-controller/routing/weights/">Canary</a> · <a href="https://developer.konghq.com/kubernetes-ingress-controller/observability/prometheus/">Prometheus</a></p><h3>Nettoyage</h3><pre><code>kubectl delete namespace demo
+kubectl delete gateway kong-gateway -n kong
+kubectl delete gatewayclass kong
+helm uninstall kong -n kong</code></pre><p>Ne pas supprimer les CRD Gateway API ni kube-prometheus-stack s'ils sont partagés avec d'autres applications.</p></section></main><footer>EFI Academy · Kubernetes / Kong Gateway API · Guide de laboratoire</footer></body></html>
