@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong-prometheus-metrics
+  namespace: kong
+  labels:
+    app.kubernetes.io/name: kong-prometheus-metrics
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: gateway
+  ports:
+  - name: metrics
+    port: 8100
+    targetPort: 8100

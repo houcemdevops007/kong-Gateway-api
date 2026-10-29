@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-v1
+  namespace: demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: hello, version: v1}
+  template:
+    metadata:
+      labels: {app: hello, version: v1}
+    spec:
+      containers:
+      - name: hello
+        image: hashicorp/http-echo:1.0.0
+        args: ["-text=Hello Kubernetes V1 via Kong!", "-listen=:5678"]
+        ports: [{containerPort: 5678}]
+        readinessProbe:
+          tcpSocket: {port: 5678}
+          periodSeconds: 5
+        resources:
+          requests: {cpu: 25m, memory: 32Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-v1
+  namespace: demo
+spec:
+  selector: {app: hello, version: v1}
+  ports: [{port: 80, targetPort: 5678}]
